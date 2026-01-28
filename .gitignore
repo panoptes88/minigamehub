@@ -1,0 +1,32 @@
+node_modules/
+package-lock.json
+yarn.lock
+
+# 构建输出
+dist/
+build/
+docs/build/
+
+# 环境
+.env
+.env.local
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.temp
+tmp/
+temp/
+
+# 游戏特定
+games/*/node_modules/
+games/*/dist/

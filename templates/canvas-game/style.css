@@ -1,0 +1,13 @@
+/* 游戏特定样式 */
+
+/* 可以在这里添加游戏特定的样式 */
+
+/* 动画效果 */
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.game-active {
+    animation: pulse 2s infinite;
+}
