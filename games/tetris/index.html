@@ -635,6 +635,55 @@
             margin-top: 8px;
         }
 
+        /* 音效控制 */
+        .sound-control {
+            background: var(--panel-bg);
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .sound-control h3 {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .volume-slider {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            background: #1a1a2e;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--accent-primary);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .sound-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .sound-toggle label {
+            color: var(--text-body);
+            font-size: 0.8rem;
+        }
+
+        .sound-icon {
+            font-size: 1.2rem;
+        }
+
         .skill-hint {
             background: var(--kbd-bg);
             color: var(--text-muted);
@@ -761,6 +810,18 @@
                             <span class="skill-hint">2</span>
                             <span class="skill-hint">3</span>
                             <span class="skill-hint">4</span>
+                        </div>
+                    </div>
+
+                    <!-- 音效控制 -->
+                    <div class="sound-control">
+                        <h3>音效</h3>
+                        <input type="range" class="volume-slider" id="volume-slider"
+                               min="0" max="100" value="50"
+                               oninput="updateVolume(this.value)">
+                        <div class="sound-toggle">
+                            <span class="sound-icon" id="sound-icon">🔊</span>
+                            <label>音效已启用</label>
                         </div>
                     </div>
 

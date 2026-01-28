@@ -344,6 +344,9 @@
             piece.shape = oldShape;
             return false;
         }
+
+        // 旋转音效
+        AudioManager.playRotateSound();
         return true;
     }
 
@@ -391,6 +394,8 @@
             // 移动时生成拖尾粒子
             if (dx !== 0 && piece) {
                 spawnTrailParticles(piece);
+                // 移动音效
+                AudioManager.playMoveSound(piece.type);
             }
 
             return true;
@@ -561,6 +566,8 @@
         const type = powerup.type;
         const powerupData = POWERUPS[type];
 
+        // 道具收集音效
+        AudioManager.playPowerupSound();
         addEffect(powerup.y, powerup.x, 'powerup');
 
         switch (type) {
@@ -609,6 +616,8 @@
                     state.score += 30;
                     state.lines++;
                     showPowerupMessage('🧹 清除一行!');
+                    // 清行音效
+                    AudioManager.playLineClearSound(1);
                 }
                 break;
 
@@ -625,6 +634,8 @@
                 // 护盾道具: 防止一次游戏结束
                 state.activeEffects.shield = true;
                 showPowerupMessage('🛡️ 护盾激活!');
+                // 护盾激活音效
+                AudioManager.playShieldSound();
                 break;
         }
 
@@ -685,6 +696,9 @@
 
     // ==================== 特殊能力效果 ====================
     function triggerExplosive(row, col) {
+        // 爆炸音效
+        AudioManager.playSpecialSound('EXPLOSIVE');
+
         const radius = 1;
         for (let r = row - radius; r <= row + radius; r++) {
             for (let c = col - radius; c <= col + radius; c++) {
@@ -703,6 +717,9 @@
     }
 
     function triggerColorful(row, col) {
+        // 变色音效
+        AudioManager.playSpecialSound('COLORFUL');
+
         const radius = 2;
         for (let r = row - radius; r <= row + radius; r++) {
             for (let c = col - radius; c <= col + radius; c++) {
@@ -719,6 +736,9 @@
     }
 
     function triggerMagnetic(row, col) {
+        // 磁力音效
+        AudioManager.playSpecialSound('MAGNETIC');
+
         const radius = 3;
         let attracted = 0;
         for (let r = row - radius; r <= row + radius; r++) {
@@ -743,6 +763,9 @@
     }
 
     function triggerSplit(row, col) {
+        // 分裂音效
+        AudioManager.playSpecialSound('SPLIT');
+
         const offsets = [-1, 1];
         offsets.forEach(offset => {
             const newCol = col + offset;
@@ -1060,6 +1083,13 @@
             const points = [0, 100, 300, 500, 800];
             state.score += points[linesCleared] * state.level;
 
+            // 消除音效
+            if (linesCleared >= 4) {
+                AudioManager.playTetrisClearSound();
+            } else {
+                AudioManager.playLineClearSound(linesCleared);
+            }
+
             // 触发连击效果
             triggerComboEffect();
 
@@ -1211,6 +1241,11 @@
         state.lastDropTime = performance.now();
         resetDropInterval();
         startPowerupSpawner();
+
+        // 初始化音频上下文（需要用户交互）
+        AudioManager.init();
+        // 游戏开始音效
+        AudioManager.playGameStartSound();
     }
 
     function stopGame() {
@@ -1289,6 +1324,8 @@
         state.gameOver = true;
         state.running = false;
         stopGame();
+        // 游戏结束音效
+        AudioManager.playGameOverSound();
         render();
     }
 
@@ -1714,6 +1751,8 @@
             const intensity = Math.min(10, state.comboCount * 2);
             triggerScreenShake(intensity, 20);
             spawnComboParticles();
+            // 连击音效 - 音阶上升
+            AudioManager.playComboSound(state.comboCount);
             showComboText();
         }
     }
@@ -1721,6 +1760,7 @@
     function showComboText() {
         // 连击文字效果通过addEffect实现
         addEffect(10, 5, 'combo-text');
+        AudioManager.playComboTextSound();
     }
 
     function triggerFullscreenEffect(type) {
@@ -2133,6 +2173,324 @@
 
     // ==================== 主题系统 ====================
     const THEMES = ['cyberpunk', 'retro', 'nature', 'ocean', 'dark'];
+
+    // ==================== 音效系统 ====================
+    const AUDIO = {
+        enabled: true,
+        masterVolume: 0.5,
+        // 音阶定义 (C4 - C5)
+        NOTES: {
+            C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.00, A3: 220.00, B3: 246.94,
+            C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.00, A4: 440.00, B4: 493.88,
+            C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.00, B5: 987.77,
+            C6: 1046.50
+        }
+    };
+
+    // 音效管理器
+    const AudioManager = {
+        ctx: null,
+        masterGain: null,
+        initialized: false,
+
+        init() {
+            if (this.initialized) return;
+            try {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = AUDIO.masterVolume;
+                this.masterGain.connect(this.ctx.destination);
+                this.initialized = true;
+            } catch (e) {
+                console.warn('Audio not supported:', e);
+            }
+        },
+
+        setVolume(volume) {
+            AUDIO.masterVolume = volume;
+            if (this.masterGain) {
+                this.masterGain.gain.value = volume;
+            }
+        },
+
+        playTone(frequency, duration, type = 'sine', volume = 0.3) {
+            if (!AUDIO.enabled || !this.ctx) return;
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = type;
+            osc.frequency.value = frequency;
+
+            gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        },
+
+        playNoise(duration, volume = 0.2) {
+            if (!AUDIO.enabled || !this.ctx) return;
+
+            const bufferSize = this.ctx.sampleRate * duration;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = this.ctx.createBufferSource();
+            const gain = this.ctx.createGain();
+            const filter = this.ctx.createBiquadFilter();
+
+            noise.buffer = buffer;
+            filter.type = 'lowpass';
+            filter.frequency.value = 1000;
+
+            gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.masterGain);
+
+            noise.start();
+        },
+
+        // 方块移动音效
+        playMoveSound(pieceType) {
+            const freqs = {
+                'I': 330, 'O': 294, 'T': 262, 'S': 349,
+                'Z': 392, 'J': 440, 'L': 494
+            };
+            const freq = freqs[pieceType] || 330;
+            this.playTone(freq, 0.05, 'sine', 0.15);
+        },
+
+        // 方块旋转音效
+        playRotateSound() {
+            this.playTone(523, 0.05, 'sine', 0.12);
+            setTimeout(() => this.playTone(659, 0.03, 'sine', 0.1), 30);
+        },
+
+        // 单行消除音效
+        playLineClearSound(lines) {
+            const baseFreq = 220;
+            for (let i = 0; i < lines; i++) {
+                setTimeout(() => {
+                    this.playTone(baseFreq * (1 + i * 0.3), 0.1, 'square', 0.15);
+                }, i * 50);
+            }
+            // 扫频效果
+            setTimeout(() => {
+                this.playSweep(200, 800, 0.2, 'triangle', 0.1);
+            }, lines * 50);
+        },
+
+        // 震撼消除音效 (4行)
+        playTetrisClearSound() {
+            // 和弦
+            this.playTone(261.63, 0.15, 'square', 0.15);  // C4
+            this.playTone(329.63, 0.15, 'square', 0.15);  // E4
+            this.playTone(392.00, 0.15, 'square', 0.15);  // G4
+            this.playTone(523.25, 0.3, 'square', 0.2);    // C5
+
+            // 低音冲击
+            setTimeout(() => {
+                this.playTone(65.41, 0.2, 'sawtooth', 0.2);  // C2
+            }, 100);
+
+            // 扫频尾音
+            setTimeout(() => {
+                this.playSweep(400, 1200, 0.3, 'sine', 0.08);
+            }, 200);
+
+            // 噪声爆发
+            setTimeout(() => {
+                this.playNoise(0.4, 0.15);
+            }, 150);
+        },
+
+        // 扫频音效
+        playSweep(fromFreq, toFreq, duration, type = 'sine', volume = 0.2) {
+            if (!AUDIO.enabled || !this.ctx) return;
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = type;
+            osc.frequency.setValueAtTime(fromFreq, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(toFreq, this.ctx.currentTime + duration);
+
+            gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        },
+
+        // 连击音效 (音阶上升)
+        playComboSound(comboCount) {
+            const notes = ['C4', 'E4', 'G4', 'C5', 'E5', 'G5', 'C6'];
+            const noteIndex = Math.min(comboCount - 1, notes.length - 1);
+            const note = notes[noteIndex];
+            const freq = AUDIO.NOTES[note];
+
+            // 主要音调
+            this.playTone(freq, 0.15, 'sine', 0.2);
+
+            // 颤音效果
+            setTimeout(() => {
+                this.playTone(freq * 1.02, 0.1, 'sine', 0.1);
+            }, 50);
+            setTimeout(() => {
+                this.playTone(freq * 0.98, 0.1, 'sine', 0.1);
+            }, 100);
+        },
+
+        // 技能使用音效
+        playSkillSound(skillType) {
+            switch (skillType) {
+                case 'slow':
+                    // 时间减缓 - 低频脉动
+                    this.playTone(110, 0.3, 'sine', 0.2);
+                    setTimeout(() => this.playTone(82.41, 0.2, 'sine', 0.15), 150);
+                    break;
+                case 'clear':
+                    // 行消除 - 扫频上升
+                    this.playSweep(200, 600, 0.2, 'triangle', 0.15);
+                    setTimeout(() => this.playTone(880, 0.15, 'square', 0.12), 200);
+                    break;
+                case 'preview':
+                    // 预览 - 水晶音效
+                    this.playTone(1046.50, 0.1, 'sine', 0.15);
+                    setTimeout(() => this.playTone(1318.51, 0.15, 'sine', 0.12), 80);
+                    setTimeout(() => this.playTone(1567.98, 0.2, 'sine', 0.1), 160);
+                    break;
+                case 'rotate':
+                    // 旋转 - 旋转音效
+                    for (let i = 0; i < 5; i++) {
+                        setTimeout(() => {
+                            this.playTone(300 + i * 50, 0.05, 'sine', 0.1);
+                        }, i * 30);
+                    }
+                    break;
+            }
+        },
+
+        // 特殊能力音效
+        playSpecialSound(specialType) {
+            switch (specialType) {
+                case 'EXPLOSIVE':
+                    // 爆炸 - 强烈的噪声和低音
+                    this.playTone(55, 0.3, 'sawtooth', 0.3);
+                    this.playNoise(0.5, 0.25);
+                    setTimeout(() => this.playSweep(200, 50, 0.3, 'square', 0.15), 50);
+                    break;
+                case 'PENETRATE':
+                    // 穿透 - 快速扫频
+                    this.playSweep(800, 200, 0.1, 'sine', 0.15);
+                    break;
+                case 'COLORFUL':
+                    // 变色 - 彩虹音效
+                    for (let i = 0; i < 7; i++) {
+                        const notes = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4'];
+                        setTimeout(() => {
+                            this.playTone(AUDIO.NOTES[notes[i]], 0.1, 'sine', 0.12);
+                        }, i * 50);
+                    }
+                    break;
+                case 'MAGNETIC':
+                    // 磁力 - 吸引音效
+                    for (let i = 0; i < 8; i++) {
+                        setTimeout(() => {
+                            this.playTone(100 + i * 30, 0.05, 'sine', 0.1);
+                        }, i * 40);
+                    }
+                    setTimeout(() => this.playTone(200, 0.2, 'sine', 0.15), 320);
+                    break;
+                case 'SPLIT':
+                    // 分裂 - 分裂音效
+                    this.playTone(440, 0.1, 'square', 0.15);
+                    setTimeout(() => this.playTone(660, 0.1, 'square', 0.12), 50);
+                    setTimeout(() => this.playTone(880, 0.15, 'square', 0.1), 100);
+                    break;
+            }
+        },
+
+        // 道具收集音效
+        playPowerupSound() {
+            this.playTone(523.25, 0.1, 'sine', 0.15);
+            setTimeout(() => this.playTone(659.25, 0.1, 'sine', 0.15), 80);
+            setTimeout(() => this.playTone(783.99, 0.15, 'sine', 0.12), 160);
+        },
+
+        // 游戏开始音效
+        playGameStartSound() {
+            const melody = [261.63, 329.63, 392.00, 523.25];
+            melody.forEach((freq, i) => {
+                setTimeout(() => {
+                    this.playTone(freq, 0.2, 'square', 0.15);
+                }, i * 100);
+            });
+        },
+
+        // 游戏结束音效
+        playGameOverSound() {
+            const melody = [523.25, 493.88, 440.00, 392.00, 329.63, 261.63];
+            melody.forEach((freq, i) => {
+                setTimeout(() => {
+                    this.playTone(freq, 0.25, 'triangle', 0.15);
+                }, i * 150);
+            });
+        },
+
+        // 护盾激活音效
+        playShieldSound() {
+            this.playTone(440, 0.15, 'sine', 0.15);
+            setTimeout(() => this.playTone(554.37, 0.15, 'sine', 0.15), 100);
+            setTimeout(() => this.playTone(659.25, 0.3, 'sine', 0.12), 200);
+        },
+
+        // 连击文字音效
+        playComboTextSound() {
+            this.playTone(880, 0.1, 'sine', 0.1);
+            setTimeout(() => this.playTone(1108.73, 0.15, 'sine', 0.1), 50);
+        }
+    };
+
+    // 暴露音量控制到全局
+    window.setMasterVolume = function(volume) {
+        AudioManager.setVolume(Math.max(0, Math.min(1, volume)));
+    };
+
+    window.toggleSound = function() {
+        AUDIO.enabled = !AUDIO.enabled;
+        return AUDIO.enabled;
+    };
+
+    window.updateVolume = function(value) {
+        const volume = value / 100;
+        AudioManager.setVolume(volume);
+        // 更新音量图标
+        const icon = document.getElementById('sound-icon');
+        if (icon) {
+            if (value == 0) {
+                icon.textContent = '🔇';
+            } else if (value < 50) {
+                icon.textContent = '🔉';
+            } else {
+                icon.textContent = '🔊';
+            }
+        }
+    };
 
     function loadTheme() {
         const savedTheme = localStorage.getItem('tetris-theme');
