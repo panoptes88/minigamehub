@@ -5,6 +5,201 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🧩 俄罗斯方块 - MiniGameHub</title>
     <style>
+        /* ==================== 主题变量定义 ==================== */
+        :root {
+            /* 默认主题 (赛博朋克) */
+            --theme-name: '赛博朋克';
+            --bg-gradient-start: #1a1a2e;
+            --bg-gradient-mid: #16213e;
+            --bg-gradient-end: #0f3460;
+            --container-bg: rgba(22, 33, 62, 0.95);
+            --container-shadow: rgba(0, 0, 0, 0.4);
+            --board-bg: #0a0a1a;
+            --panel-bg: rgba(10, 10, 26, 0.8);
+            --text-primary: #e94560;
+            --text-secondary: #667eea;
+            --text-tertiary: #4ecca3;
+            --text-gold: #ffd700;
+            --text-red: #ff6b6b;
+            --text-muted: #888;
+            --text-body: #fff;
+            --border-color: #3a3a5e;
+            --accent-primary: #e94560;
+            --accent-secondary: #667eea;
+            --accent-success: #4ecca3;
+            --energy-gradient-start: #4ecca3;
+            --energy-gradient-end: #667eea;
+            --skill-bg: linear-gradient(135deg, #2a2a4e 0%, #1a1a2e 100%);
+            --restart-gradient-start: #e94560;
+            --restart-gradient-end: #c73e54;
+            --kbd-bg: #333;
+            --mobile-btn-bg: rgba(255, 255, 255, 0.1);
+            --mobile-btn-active: #e94560;
+            --mobile-btn-action: #4ecca3;
+            --transition-speed: 0.3s;
+        }
+
+        /* 赛博朋克主题 */
+        [data-theme="cyberpunk"] {
+            --theme-name: '赛博朋克';
+            --bg-gradient-start: #0d0221;
+            --bg-gradient-mid: #1a0a2e;
+            --bg-gradient-end: #2d1b4e;
+            --container-bg: rgba(26, 10, 46, 0.95);
+            --container-shadow: rgba(157, 0, 255, 0.3);
+            --board-bg: #050510;
+            --panel-bg: rgba(15, 8, 30, 0.9);
+            --text-primary: #00f5ff;
+            --text-secondary: #ff00ff;
+            --text-tertiary: #00ff88;
+            --text-gold: #ffd700;
+            --text-red: #ff4466;
+            --text-muted: #666688;
+            --text-body: #e0e0ff;
+            --border-color: #4a2a8a;
+            --accent-primary: #00f5ff;
+            --accent-secondary: #ff00ff;
+            --accent-success: #00ff88;
+            --energy-gradient-start: #00f5ff;
+            --energy-gradient-end: #ff00ff;
+            --skill-bg: linear-gradient(135deg, #2a1a4a 0%, #0d0221 100%);
+            --restart-gradient-start: #ff00ff;
+            --restart-gradient-end: #9900ff;
+            --kbd-bg: #2a1a4a;
+            --mobile-btn-bg: rgba(0, 245, 255, 0.15);
+            --mobile-btn-active: #00f5ff;
+            --mobile-btn-action: #00ff88;
+        }
+
+        /* 像素复古主题 */
+        [data-theme="retro"] {
+            --theme-name: '像素复古';
+            --bg-gradient-start: #2d1b4e;
+            --bg-gradient-mid: #4a2a6e;
+            --bg-gradient-end: #6b3a8e;
+            --container-bg: rgba(45, 27, 78, 0.95);
+            --container-shadow: rgba(0, 0, 0, 0.5);
+            --board-bg: #1a0a2e;
+            --panel-bg: rgba(26, 15, 40, 0.9);
+            --text-primary: #ffcc00;
+            --text-secondary: #ff99cc;
+            --text-tertiary: #99ffcc;
+            --text-gold: #ffcc00;
+            --text-red: #ff6666;
+            --text-muted: #9966aa;
+            --text-body: #ffeecc;
+            --border-color: #5a3a7a;
+            --accent-primary: #ffcc00;
+            --accent-secondary: #ff99cc;
+            --accent-success: #99ffcc;
+            --energy-gradient-start: #ffcc00;
+            --energy-gradient-end: #ff99cc;
+            --skill-bg: linear-gradient(135deg, #3a2a5a 0%, #2d1b4e 100%);
+            --restart-gradient-start: #ff9900;
+            --restart-gradient-end: #cc6600;
+            --kbd-bg: #3a2a5a;
+            --mobile-btn-bg: rgba(255, 204, 0, 0.15);
+            --mobile-btn-active: #ffcc00;
+            --mobile-btn-action: #99ffcc;
+        }
+
+        /* 自然主题 */
+        [data-theme="nature"] {
+            --theme-name: '自然';
+            --bg-gradient-start: #1a3a2a;
+            --bg-gradient-mid: #2d5a4a;
+            --bg-gradient-end: #1a4a3a;
+            --container-bg: rgba(26, 58, 42, 0.95);
+            --container-shadow: rgba(0, 100, 50, 0.3);
+            --board-bg: #0a2a1a;
+            --panel-bg: rgba(15, 40, 30, 0.9);
+            --text-primary: #7cfc00;
+            --text-secondary: #00bfff;
+            --text-tertiary: #ffa500;
+            --text-gold: #ffd700;
+            --text-red: #ff6347;
+            --text-muted: #66aa88;
+            --text-body: #ccffcc;
+            --border-color: #2a5a4a;
+            --accent-primary: #7cfc00;
+            --accent-secondary: #00bfff;
+            --accent-success: #ffa500;
+            --energy-gradient-start: #7cfc00;
+            --energy-gradient-end: #00bfff;
+            --skill-bg: linear-gradient(135deg, #1a3a2a 0%, #0a2a1a 100%);
+            --restart-gradient-start: #ff6347;
+            --restart-gradient-end: #ff4500;
+            --kbd-bg: #1a3a2a;
+            --mobile-btn-bg: rgba(124, 252, 0, 0.15);
+            --mobile-btn-active: #7cfc00;
+            --mobile-btn-action: #ffa500;
+        }
+
+        /* 海洋主题 */
+        [data-theme="ocean"] {
+            --theme-name: '海洋';
+            --bg-gradient-start: #0a1a2e;
+            --bg-gradient-mid: #1a3a5a;
+            --bg-gradient-end: #0a2a4a;
+            --container-bg: rgba(10, 40, 60, 0.95);
+            --container-shadow: rgba(0, 100, 150, 0.3);
+            --board-bg: #050a15;
+            --panel-bg: rgba(10, 30, 50, 0.9);
+            --text-primary: #00d4ff;
+            --text-secondary: #00ff88;
+            --text-tertiary: #ffa500;
+            --text-gold: #ffd700;
+            --text-red: #ff6b6b;
+            --text-muted: #4488aa;
+            --text-body: #ccffff;
+            --border-color: #1a4a6a;
+            --accent-primary: #00d4ff;
+            --accent-secondary: #00ff88;
+            --accent-success: #ffa500;
+            --energy-gradient-start: #00d4ff;
+            --energy-gradient-end: #0088aa;
+            --skill-bg: linear-gradient(135deg, #0a2a4a 0%, #050a15 100%);
+            --restart-gradient-start: #00d4ff;
+            --restart-gradient-end: #0088aa;
+            --kbd-bg: #0a2a4a;
+            --mobile-btn-bg: rgba(0, 212, 255, 0.15);
+            --mobile-btn-active: #00d4ff;
+            --mobile-btn-action: #00ff88;
+        }
+
+        /* 暗黑主题 */
+        [data-theme="dark"] {
+            --theme-name: '暗黑';
+            --bg-gradient-start: #000000;
+            --bg-gradient-mid: #1a1a1a;
+            --bg-gradient-end: #2a2a2a;
+            --container-bg: rgba(20, 20, 20, 0.95);
+            --container-shadow: rgba(0, 0, 0, 0.6);
+            --board-bg: #0a0a0a;
+            --panel-bg: rgba(15, 15, 15, 0.9);
+            --text-primary: #888888;
+            --text-secondary: #666666;
+            --text-tertiary: #aaaaaa;
+            --text-gold: #666666;
+            --text-red: #444444;
+            --text-muted: #444444;
+            --text-body: #cccccc;
+            --border-color: #333333;
+            --accent-primary: #666666;
+            --accent-secondary: #555555;
+            --accent-success: #777777;
+            --energy-gradient-start: #555555;
+            --energy-gradient-end: #777777;
+            --skill-bg: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+            --restart-gradient-start: #333333;
+            --restart-gradient-end: #222222;
+            --kbd-bg: #222222;
+            --mobile-btn-bg: rgba(100, 100, 100, 0.1);
+            --mobile-btn-active: #666666;
+            --mobile-btn-action: #888888;
+        }
+
+        /* ==================== 基础样式 ==================== */
         * {
             margin: 0;
             padding: 0;
@@ -13,12 +208,13 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-mid) 50%, var(--bg-gradient-end) 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
+            transition: background var(--transition-speed);
         }
 
         .game-wrapper {
@@ -28,10 +224,11 @@
         }
 
         .game-container {
-            background: rgba(22, 33, 62, 0.95);
+            background: var(--container-bg);
             border-radius: 20px;
             padding: 25px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 20px 60px var(--container-shadow);
+            transition: all var(--transition-speed);
         }
 
         .game-header {
@@ -42,22 +239,86 @@
         }
 
         .game-header h1 {
-            color: #e94560;
+            color: var(--text-primary);
             font-size: 1.5rem;
             display: flex;
             align-items: center;
             gap: 10px;
+            transition: color var(--transition-speed);
         }
 
         .back-btn {
-            color: #667eea;
+            color: var(--text-secondary);
             text-decoration: none;
             font-weight: 500;
-            transition: color 0.3s;
+            transition: color var(--transition-speed);
         }
 
         .back-btn:hover {
-            color: #fff;
+            color: var(--text-body);
+        }
+
+        /* ==================== 主题选择器 ==================== */
+        .theme-selector {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .theme-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .theme-btn:hover {
+            transform: scale(1.1);
+            border-color: var(--accent-primary);
+        }
+
+        .theme-btn.active {
+            border-color: var(--text-gold);
+            box-shadow: 0 0 10px var(--text-gold);
+        }
+
+        .theme-btn::after {
+            content: attr(data-theme);
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.2s;
+            color: var(--text-muted);
+        }
+
+        .theme-btn:hover::after {
+            opacity: 1;
+        }
+
+        /* 主题按钮颜色 */
+        .theme-cyberpunk {
+            background: linear-gradient(135deg, #00f5ff 25%, #ff00ff 25%, #ff00ff 50%, #00ff88 50%, #00ff88 75%, #ffd700 75%);
+            background-size: 10px 10px;
+        }
+        .theme-retro {
+            background: linear-gradient(135deg, #ffcc00 33%, #ff99cc 33%, #ff99cc 66%, #99ffcc 66%);
+        }
+        .theme-nature {
+            background: linear-gradient(135deg, #7cfc00 50%, #00bfff 50%);
+        }
+        .theme-ocean {
+            background: linear-gradient(135deg, #00d4ff 50%, #0088aa 50%);
+        }
+        .theme-dark {
+            background: linear-gradient(135deg, #333 33%, #555 33%, #555 66%, #777 66%);
         }
 
         .main-area {
@@ -66,7 +327,7 @@
         }
 
         .game-board-wrapper {
-            background: #0a0a1a;
+            background: var(--board-bg);
             border-radius: 10px;
             padding: 10px;
             position: relative;
@@ -75,7 +336,7 @@
         #game-canvas {
             display: block;
             border-radius: 5px;
-            background: #0a0a1a;
+            background: var(--board-bg);
             transition: transform 0.5s ease;
         }
 
@@ -91,14 +352,15 @@
         }
 
         .info-box {
-            background: rgba(10, 10, 26, 0.8);
+            background: var(--panel-bg);
             border-radius: 10px;
             padding: 12px;
             text-align: center;
+            transition: all var(--transition-speed);
         }
 
         .info-box h3 {
-            color: #888;
+            color: var(--text-muted);
             font-size: 0.75rem;
             margin-bottom: 6px;
             text-transform: uppercase;
@@ -106,36 +368,37 @@
         }
 
         .info-box .value {
-            color: #fff;
+            color: var(--text-body);
             font-size: 1.3rem;
             font-weight: bold;
+            transition: color var(--transition-speed);
         }
 
         .info-box .value.score {
-            color: #4ecca3;
+            color: var(--text-tertiary);
         }
 
         .info-box .value.high-score {
-            color: #ffd700;
+            color: var(--text-gold);
         }
 
         .info-box .value.level {
-            color: #667eea;
+            color: var(--text-secondary);
         }
 
         .info-box .value.lines {
-            color: #ff6b6b;
+            color: var(--text-red);
         }
 
         /* 能量条样式 */
         .energy-box {
-            background: rgba(10, 10, 26, 0.8);
+            background: var(--panel-bg);
             border-radius: 10px;
             padding: 12px;
         }
 
         .energy-box h3 {
-            color: #888;
+            color: var(--text-muted);
             font-size: 0.75rem;
             margin-bottom: 8px;
             text-transform: uppercase;
@@ -152,7 +415,7 @@
 
         .energy-bar {
             height: 100%;
-            background: linear-gradient(90deg, #4ecca3, #667eea);
+            background: linear-gradient(90deg, var(--energy-gradient-start), var(--energy-gradient-end));
             border-radius: 8px;
             transition: width 0.3s ease;
             position: relative;
@@ -180,7 +443,7 @@
         }
 
         .energy-text {
-            color: #4ecca3;
+            color: var(--text-tertiary);
             font-size: 0.8rem;
             margin-top: 5px;
             text-align: center;
@@ -188,13 +451,13 @@
 
         /* 技能区域 */
         .skills-box {
-            background: rgba(10, 10, 26, 0.8);
+            background: var(--panel-bg);
             border-radius: 10px;
             padding: 12px;
         }
 
         .skills-box h3 {
-            color: #888;
+            color: var(--text-muted);
             font-size: 0.75rem;
             margin-bottom: 10px;
             text-transform: uppercase;
@@ -208,8 +471,8 @@
         }
 
         .skill-btn {
-            background: linear-gradient(135deg, #2a2a4e 0%, #1a1a2e 100%);
-            border: 2px solid #3a3a5e;
+            background: var(--skill-bg);
+            border: 2px solid var(--border-color);
             border-radius: 8px;
             padding: 8px 4px;
             cursor: pointer;
@@ -221,13 +484,13 @@
         }
 
         .skill-btn:hover:not(.disabled) {
-            border-color: #667eea;
+            border-color: var(--accent-secondary);
             transform: translateY(-2px);
             box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
         }
 
         .skill-btn.active {
-            border-color: #4ecca3;
+            border-color: var(--accent-success);
             box-shadow: 0 0 15px rgba(78, 204, 163, 0.4);
             animation: skillPulse 1s infinite;
         }
@@ -247,31 +510,31 @@
         }
 
         .skill-btn .skill-name {
-            color: #fff;
+            color: var(--text-body);
             font-size: 0.65rem;
             font-weight: bold;
         }
 
         .skill-btn .skill-cost {
-            color: #4ecca3;
+            color: var(--text-tertiary);
             font-size: 0.6rem;
         }
 
         #next-canvas {
-            background: #0a0a1a;
+            background: var(--board-bg);
             border-radius: 5px;
             margin: 0 auto;
         }
 
         /* 未来方块预览 */
         .future-pieces {
-            background: rgba(10, 10, 26, 0.8);
+            background: var(--panel-bg);
             border-radius: 10px;
             padding: 12px;
         }
 
         .future-pieces h3 {
-            color: #888;
+            color: var(--text-muted);
             font-size: 0.75rem;
             margin-bottom: 8px;
             text-transform: uppercase;
@@ -279,7 +542,7 @@
         }
 
         #future-canvas {
-            background: #0a0a1a;
+            background: var(--board-bg);
             border-radius: 5px;
             margin: 0 auto;
         }
@@ -287,27 +550,27 @@
         .controls-info {
             margin-top: 15px;
             padding-top: 12px;
-            border-top: 1px solid #333;
+            border-top: 1px solid var(--border-color);
         }
 
         .controls-info h3 {
-            color: #888;
+            color: var(--text-muted);
             font-size: 0.7rem;
             margin-bottom: 8px;
             text-transform: uppercase;
         }
 
         .control-item {
-            color: #666;
+            color: var(--text-muted);
             font-size: 0.7rem;
             margin-bottom: 4px;
         }
 
         .control-item kbd {
-            background: #333;
+            background: var(--kbd-bg);
             padding: 2px 5px;
             border-radius: 3px;
-            color: #aaa;
+            color: var(--text-body);
             margin-right: 4px;
         }
 
@@ -324,8 +587,8 @@
         }
 
         .mobile-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
+            background: var(--mobile-btn-bg);
+            color: var(--text-body);
             border: none;
             padding: 15px 20px;
             border-radius: 10px;
@@ -336,11 +599,11 @@
         }
 
         .mobile-btn:active {
-            background: #e94560;
+            background: var(--mobile-btn-active);
         }
 
         .mobile-btn.action {
-            background: #4ecca3;
+            background: var(--mobile-btn-action);
             color: #1a1a2e;
             font-weight: bold;
             font-size: 0.9rem;
@@ -348,7 +611,7 @@
 
         .restart-btn {
             width: 100%;
-            background: linear-gradient(135deg, #e94560 0%, #c73e54 100%);
+            background: linear-gradient(135deg, var(--restart-gradient-start) 0%, var(--restart-gradient-end) 100%);
             color: white;
             border: none;
             padding: 12px;
@@ -373,8 +636,8 @@
         }
 
         .skill-hint {
-            background: #333;
-            color: #aaa;
+            background: var(--kbd-bg);
+            color: var(--text-muted);
             padding: 2px 6px;
             border-radius: 3px;
             font-size: 0.65rem;
@@ -420,7 +683,17 @@
         <div class="game-container">
             <div class="game-header">
                 <h1>🧩 俄罗斯方块</h1>
-                <a href="../../index.html" class="back-btn">← 返回</a>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <!-- 主题选择器 -->
+                    <div class="theme-selector">
+                        <button class="theme-btn theme-cyberpunk active" data-theme="cyberpunk" onclick="setTheme('cyberpunk')" title="赛博朋克"></button>
+                        <button class="theme-btn theme-retro" data-theme="retro" onclick="setTheme('retro')" title="像素复古"></button>
+                        <button class="theme-btn theme-nature" data-theme="nature" onclick="setTheme('nature')" title="自然"></button>
+                        <button class="theme-btn theme-ocean" data-theme="ocean" onclick="setTheme('ocean')" title="海洋"></button>
+                        <button class="theme-btn theme-dark" data-theme="dark" onclick="setTheme('dark')" title="暗黑"></button>
+                    </div>
+                    <a href="../../index.html" class="back-btn">← 返回</a>
+                </div>
             </div>
 
             <div class="main-area">

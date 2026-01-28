@@ -297,10 +297,14 @@
         const shape = SHAPES[type];
         const special = SPECIAL_TYPES[specialType];
 
+        // 获取主题调整后的颜色
+        const themeColor = getThemeAdjustedColor(shape.color, type);
+
         return {
             type: type,
-            color: special.color || shape.color,
-            baseColor: shape.color,
+            color: special.color || themeColor,
+            baseColor: themeColor,
+            originalColor: shape.color,
             special: specialType,
             rotation: 0,
             shape: shape.rotations[0],
@@ -972,6 +976,7 @@
                                     if (shape[r][c]) {
                                         state.board[piece.y + r][piece.x + c] = {
                                             color: piece.baseColor || piece.color,
+                                            pieceType: piece.type,
                                             special: piece.special
                                         };
                                     }
@@ -987,6 +992,7 @@
                     }
                     state.board[boardY][boardX] = {
                         color: piece.baseColor || piece.color,
+                        pieceType: piece.type,
                         special: piece.special
                     };
                 }
@@ -1336,7 +1342,7 @@
         for (let row = 0; row < ROWS; row++) {
             for (let col = 0; col < COLS; col++) {
                 if (state.board[row][col]) {
-                    drawBlock(ctx, col, row, state.board[row][col].color, state.board[row][col].special);
+                    drawBlock(ctx, col, row, state.board[row][col].color, state.board[row][col].special, state.board[row][col].pieceType);
                 }
             }
         }
@@ -1420,13 +1426,15 @@
         drawOverlay();
     }
 
-    function drawBlock(context, x, y, color, special = null) {
+    function drawBlock(context, x, y, color, special = null, pieceType = null) {
         const padding = 1;
         const xPos = x * BLOCK_SIZE + padding;
         const yPos = y * BLOCK_SIZE + padding;
         const size = BLOCK_SIZE - padding * 2;
 
-        context.fillStyle = color;
+        // 获取主题调整后的颜色
+        const themeColor = getThemeAdjustedColor(color, pieceType);
+        context.fillStyle = themeColor;
         context.fillRect(xPos, yPos, size, size);
 
         context.fillStyle = 'rgba(255, 255, 255, 0.3)';
@@ -2123,9 +2131,65 @@
         render();
     };
 
+    // ==================== 主题系统 ====================
+    const THEMES = ['cyberpunk', 'retro', 'nature', 'ocean', 'dark'];
+
+    function loadTheme() {
+        const savedTheme = localStorage.getItem('tetris-theme');
+        if (savedTheme && THEMES.includes(savedTheme)) {
+            setTheme(savedTheme, false);
+        } else {
+            setTheme('cyberpunk', false);
+        }
+    }
+
+    window.setTheme = function(themeName, save = true) {
+        if (!THEMES.includes(themeName)) return;
+
+        // 保存主题设置
+        if (save) {
+            localStorage.setItem('tetris-theme', themeName);
+        }
+
+        // 应用主题到 body
+        document.body.setAttribute('data-theme', themeName);
+
+        // 更新按钮状态
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.theme === themeName) {
+                btn.classList.add('active');
+            }
+        });
+
+        // 重新渲染游戏
+        render();
+    };
+
+    function getThemeName() {
+        return document.body.getAttribute('data-theme') || 'cyberpunk';
+    }
+
+    // 根据主题调整方块颜色
+    function getThemeAdjustedColor(baseColor, pieceType) {
+        const theme = getThemeName();
+        const colorMap = {
+            'I': { cyberpunk: '#00f5ff', retro: '#ffcc00', nature: '#7cfc00', ocean: '#00d4ff', dark: '#aaaaaa' },
+            'O': { cyberpunk: '#ffd700', retro: '#ff99cc', nature: '#00bfff', ocean: '#00ff88', dark: '#888888' },
+            'T': { cyberpunk: '#da70d6', retro: '#99ffcc', nature: '#ffa500', ocean: '#ffa500', dark: '#777777' },
+            'S': { cyberpunk: '#32cd32', retro: '#ffcc00', nature: '#00bfff', ocean: '#7cfc00', dark: '#666666' },
+            'Z': { cyberpunk: '#ff6347', retro: '#ff6666', nature: '#ff6347', ocean: '#ff6b6b', dark: '#555555' },
+            'J': { cyberpunk: '#4169e1', retro: '#ff99cc', nature: '#7cfc00', ocean: '#00d4ff', dark: '#666666' },
+            'L': { cyberpunk: '#ffa500', retro: '#ffcc00', nature: '#ffa500', ocean: '#ffa500', dark: '#777777' }
+        };
+
+        return colorMap[pieceType]?.[theme] || baseColor;
+    }
+
     function init() {
         loadHighScore();
         initBoard();
+        loadTheme();
         render();
         renderNextPiece();
         bindInput();
