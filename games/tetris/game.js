@@ -123,9 +123,9 @@
             BOUNCE_DURATION: 80       // 反弹持续时间 (ms)
         },
         GRAVITY: {
-            TOP_ZONE: 0.6,            // 上方区域重力倍率 (下落慢)
-            BOTTOM_ZONE: 1.2,         // 下方区域重力倍率 (下落快)
-            NORMAL_ZONE: 0.9          // 中间区域重力倍率
+            TOP_ZONE: 0.5,            // 上方区域重力倍率 (下落慢，0.5倍)
+            BOTTOM_ZONE: 1.2,         // 下方区域重力倍率 (下落快，1.2倍)
+            NORMAL_ZONE: 0.85         // 中间区域重力倍率
         },
         FRICTION: {
             'I': 0.92,                // 青色方块摩擦力
@@ -144,6 +144,50 @@
         MIDDLE: { rows: 6, endRow: 14, multiplier: 0.9 },
         BOTTOM: { rows: 15, endRow: 20, multiplier: 1.2 }
     };
+
+    // ==================== 粒子系统常量 ====================
+    const PARTICLES = {
+        EXPLOSION: {
+            count: 20,
+            speed: 3,
+            size: { min: 2, max: 6 },
+            life: { min: 20, max: 40 }
+        },
+        SPARKLE: {
+            count: 8,
+            speed: 2,
+            size: { min: 1, max: 3 },
+            life: { min: 15, max: 30 }
+        },
+        TRAIL: {
+            count: 3,
+            speed: 0.5,
+            size: { min: 1, max: 3 },
+            life: { min: 10, max: 20 }
+        },
+        COMBO: {
+            count: 30,
+            speed: 5,
+            size: { min: 3, max: 8 },
+            life: { min: 30, max: 50 }
+        },
+        SPECIAL: {
+            count: 50,
+            speed: 6,
+            size: { min: 4, max: 10 },
+            life: { min: 40, max: 60 }
+        }
+    };
+
+    // 粒子颜色池
+    const PARTICLE_COLORS = [
+        '#00f5ff', '#ffd700', '#da70d6', '#32cd32', '#ff6347',
+        '#4169e1', '#ffa500', '#ff0000', '#00ff7f', '#ff69b4',
+        '#ffffff', '#00ff00', '#ff00ff'
+    ];
+
+    // 连击阈值
+    const COMBO_THRESHOLD = 2;
 
     // 等级对应的下落速度 (ms)
     const LEVEL_SPEED = [
@@ -198,7 +242,18 @@
             },
             lastMoveTime: 0,     // 上次移动时间
             moveDelay: 80        // 移动间隔 (用于惯性)
-        }
+        },
+        // 粒子系统
+        particles: [],           // 活动粒子 [{x, y, vx, vy, color, size, life, maxLife, type}]
+        comboCount: 0,           // 连击计数
+        comboTimer: 0,           // 连击计时器
+        screenShake: {           // 屏幕震动
+            intensity: 0,
+            duration: 0,
+            offsetX: 0,
+            offsetY: 0
+        },
+        fullscreenEffect: null   // 全屏特效 {type, life, maxLife}
     };
 
     // ==================== Canvas 设置 ====================
@@ -328,6 +383,12 @@
         if (isValidPosition(piece, dx, dy)) {
             piece.x += dx;
             piece.y += dy;
+
+            // 移动时生成拖尾粒子
+            if (dx !== 0 && piece) {
+                spawnTrailParticles(piece);
+            }
+
             return true;
         }
         return false;
@@ -388,6 +449,8 @@
             const dx = Math.round(piece.vx);
             if (isValidPosition(piece, dx, 0)) {
                 piece.x += dx;
+                // 惯性移动时生成拖尾粒子
+                spawnTrailParticles(piece);
             } else {
                 // 碰撞检测触发弹性反弹
                 handleElasticCollision(dx);
@@ -428,20 +491,21 @@
         let baseSpeed = LEVEL_SPEED[Math.min(state.level - 1, LEVEL_SPEED.length - 1)];
 
         // 应用重力倍率 (重力越大，下落越快)
+        // 顶部慢(0.5倍)，中间正常(0.8倍)，底部快(1.2倍)
         const gravityMult = state.currentPiece.gravityMultiplier || 1;
-        baseSpeed = baseSpeed / gravityMult;
+        baseSpeed = baseSpeed * gravityMult;
 
-        // 技能效果
+        // 技能效果 (时间减缓)
         if (state.skills.slow.active) {
             baseSpeed *= 2;
         }
 
-        // 道具效果
+        // 道具效果 (加速)
         if (state.baseSpeedMultiplier < 1) {
             baseSpeed *= state.baseSpeedMultiplier;
         }
 
-        return Math.max(baseSpeed, 30);
+        return Math.max(baseSpeed, 20);
     }
 
     // ==================== 道具系统 ====================
@@ -623,9 +687,13 @@
                 if (r >= 0 && r < ROWS && c >= 0 && c < COLS && state.board[r][c]) {
                     state.board[r][c] = null;
                     addEffect(r, c, 'explosion');
+                    // 爆炸粒子
+                    spawnExplosionParticles(r, c, '#ff0000');
                 }
             }
         }
+        // 全屏爆炸特效
+        triggerFullscreenEffect('explosive');
         applyGravity();
         state.score += 50;
     }
@@ -952,8 +1020,12 @@
                 linesCleared++;
                 energyGained += 5;
 
+                // 为每个消除的方块生成爆炸粒子
                 for (let col = 0; col < COLS; col++) {
                     if (state.board[row][col]) {
+                        const color = state.board[row][col].color;
+                        spawnExplosionParticles(row, col, color);
+
                         if (state.board[row][col].special === 'EXPLOSIVE') {
                             triggerExplosive(row, col);
                             hasSpecialInCleared = true;
@@ -981,6 +1053,9 @@
 
             const points = [0, 100, 300, 500, 800];
             state.score += points[linesCleared] * state.level;
+
+            // 触发连击效果
+            triggerComboEffect();
 
             if (state.score > state.highScore) {
                 state.highScore = state.score;
@@ -1015,14 +1090,17 @@
             switch (pos.special) {
                 case 'COLORFUL':
                     triggerColorful(pos.row, pos.col);
+                    triggerFullscreenEffect('colorful');
                     state.board[pos.row][pos.col].special = 'NORMAL';
                     break;
                 case 'MAGNETIC':
                     triggerMagnetic(pos.row, pos.col);
+                    triggerFullscreenEffect('magnetic');
                     state.board[pos.row][pos.col].special = 'NORMAL';
                     break;
                 case 'SPLIT':
                     triggerSplit(pos.row, pos.col);
+                    triggerFullscreenEffect('split');
                     state.board[pos.row][pos.col].special = 'NORMAL';
                     break;
             }
@@ -1227,6 +1305,12 @@
 
     // ==================== 渲染 ====================
     function render() {
+        // 更新粒子
+        updateParticles();
+
+        // 应用屏幕震动
+        const wasShaking = renderScreenShake();
+
         ctx.fillStyle = '#0a0a1a';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -1295,6 +1379,15 @@
                 drawBounceEffect(piece);
             }
         }
+
+        // 绘制粒子
+        renderParticles();
+
+        // 绘制全屏特效
+        renderFullscreenEffect();
+
+        // 恢复屏幕震动
+        restoreScreenShake(wasShaking);
 
         // 时间减缓效果
         if (state.skills.slow.active) {
@@ -1473,6 +1566,248 @@
         ctx.restore();
     }
 
+    // ==================== 粒子系统 ====================
+    function createParticle(x, y, color, type = 'normal') {
+        const config = PARTICLES[type] || PARTICLES.SPARKLE;
+        const speed = config.speed * (0.5 + Math.random());
+        const angle = Math.random() * Math.PI * 2;
+        const size = config.size.min + Math.random() * (config.size.max - config.size.min);
+        const life = config.life.min + Math.random() * (config.life.max - config.life.min);
+
+        return {
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 1, // 初始向上的速度
+            color: color || PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
+            size: size,
+            life: life,
+            maxLife: life,
+            type: type,
+            gravity: 0.1
+        };
+    }
+
+    function spawnParticles(x, y, color, type, count) {
+        for (let i = 0; i < count; i++) {
+            state.particles.push(createParticle(x, y, color, type));
+        }
+    }
+
+    function spawnExplosionParticles(row, col, color) {
+        const x = col * BLOCK_SIZE + BLOCK_SIZE / 2;
+        const y = row * BLOCK_SIZE + BLOCK_SIZE / 2;
+        spawnParticles(x, y, color, 'explosion', PARTICLES.EXPLOSION.count);
+    }
+
+    function spawnTrailParticles(piece) {
+        const shape = piece.shape;
+        for (let row = 0; row < shape.length; row++) {
+            for (let col = 0; col < shape[row].length; col++) {
+                if (shape[row][col]) {
+                    const x = (piece.x + col) * BLOCK_SIZE + BLOCK_SIZE / 2;
+                    const y = (piece.y + row) * BLOCK_SIZE + BLOCK_SIZE / 2;
+                    if (Math.random() > 0.7) {
+                        spawnParticles(x, y, piece.color, 'trail', 1);
+                    }
+                }
+            }
+        }
+    }
+
+    function spawnComboParticles() {
+        // 连击时从屏幕底部发射大量粒子
+        for (let i = 0; i < PARTICLES.COMBO.count; i++) {
+            const x = Math.random() * canvas.width;
+            const y = canvas.height;
+            const particle = createParticle(x, y, '#ffd700', 'combo');
+            particle.vy = -Math.abs(particle.vy); // 向上发射
+            state.particles.push(particle);
+        }
+    }
+
+    function spawnSpecialParticles() {
+        // 特殊能力全屏粒子
+        for (let i = 0; i < PARTICLES.SPECIAL.count; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            state.particles.push(createParticle(x, y, null, 'special'));
+        }
+    }
+
+    function updateParticles() {
+        state.particles = state.particles.filter(p => {
+            // 更新位置
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += p.gravity; // 应用重力
+
+            // 减速
+            p.vx *= 0.98;
+            p.vy *= 0.98;
+
+            // 生命周期
+            p.life--;
+            return p.life > 0;
+        });
+
+        // 更新屏幕震动
+        if (state.screenShake.duration > 0) {
+            state.screenShake.duration--;
+            const intensity = state.screenShake.intensity * (state.screenShake.duration / state.screenShake.maxDuration);
+            state.screenShake.offsetX = (Math.random() - 0.5) * intensity;
+            state.screenShake.offsetY = (Math.random() - 0.5) * intensity;
+        } else {
+            state.screenShake.offsetX = 0;
+            state.screenShake.offsetY = 0;
+        }
+
+        // 更新全屏特效
+        if (state.fullscreenEffect) {
+            state.fullscreenEffect.life--;
+            if (state.fullscreenEffect.life <= 0) {
+                state.fullscreenEffect = null;
+            }
+        }
+
+        // 更新连击计时
+        if (state.comboTimer > 0) {
+            state.comboTimer--;
+            if (state.comboTimer <= 0) {
+                state.comboCount = 0;
+            }
+        }
+    }
+
+    function renderParticles() {
+        state.particles.forEach(p => {
+            const alpha = p.life / p.maxLife;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+    }
+
+    function triggerScreenShake(intensity, duration) {
+        state.screenShake.intensity = intensity;
+        state.screenShake.maxDuration = duration;
+        state.screenShake.duration = duration;
+    }
+
+    function triggerComboEffect() {
+        state.comboCount++;
+        state.comboTimer = 3000; // 3秒内连续消除触发连击
+
+        if (state.comboCount >= COMBO_THRESHOLD) {
+            const intensity = Math.min(10, state.comboCount * 2);
+            triggerScreenShake(intensity, 20);
+            spawnComboParticles();
+            showComboText();
+        }
+    }
+
+    function showComboText() {
+        // 连击文字效果通过addEffect实现
+        addEffect(10, 5, 'combo-text');
+    }
+
+    function triggerFullscreenEffect(type) {
+        state.fullscreenEffect = {
+            type: type,
+            life: 30,
+            maxLife: 30
+        };
+        spawnSpecialParticles();
+        triggerScreenShake(8, 15);
+    }
+
+    function renderScreenShake() {
+        if (state.screenShake.duration > 0) {
+            ctx.save();
+            ctx.translate(state.screenShake.offsetX, state.screenShake.offsetY);
+        }
+        return state.screenShake.duration > 0;
+    }
+
+    function restoreScreenShake(wasShaking) {
+        if (wasShaking) {
+            ctx.restore();
+        }
+    }
+
+    function renderFullscreenEffect() {
+        if (!state.fullscreenEffect) return;
+
+        const effect = state.fullscreenEffect;
+        const alpha = effect.life / effect.maxLife;
+
+        ctx.save();
+
+        switch (effect.type) {
+            case 'explosive':
+                // 红色闪光
+                const gradient = ctx.createRadialGradient(
+                    canvas.width / 2, canvas.height / 2, 0,
+                    canvas.width / 2, canvas.height / 2, canvas.width
+                );
+                gradient.addColorStop(0, `rgba(255, 0, 0, ${alpha * 0.3})`);
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                break;
+
+            case 'colorful':
+                // 彩虹渐变
+                const hue = (performance.now() / 10) % 360;
+                ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${alpha * 0.2})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                break;
+
+            case 'magnetic':
+                // 磁场波纹
+                ctx.strokeStyle = `rgba(139, 69, 19, ${alpha})`;
+                ctx.lineWidth = 3;
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                const radius = (1 - alpha) * Math.max(canvas.width, canvas.height);
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+
+            case 'split':
+                // 分裂闪光
+                ctx.fillStyle = `rgba(0, 255, 127, ${alpha * 0.2})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // 闪光线条
+                ctx.strokeStyle = `rgba(0, 255, 127, ${alpha})`;
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 8; i++) {
+                    const angle = (Math.PI / 4) * i + performance.now() / 500;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.lineTo(
+                        centerX + Math.cos(angle) * canvas.width,
+                        centerY + Math.sin(angle) * canvas.height
+                    );
+                    ctx.stroke();
+                }
+                break;
+
+            default:
+                // 默认闪光
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.3})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        ctx.restore();
+    }
+
     function renderEffects() {
         state.effects = state.effects.filter(effect => {
             effect.life--;
@@ -1537,6 +1872,13 @@
                     ctx.beginPath();
                     ctx.arc(x, y, BLOCK_SIZE * (1 - alpha + 0.3), 0, Math.PI * 2);
                     ctx.stroke();
+                    break;
+                case 'combo-text':
+                    ctx.fillStyle = `rgba(255, 215, 0, ${alpha})`;
+                    ctx.font = 'bold 24px Arial';
+                    ctx.textAlign = 'center';
+                    const comboText = state.comboCount >= 3 ? `${state.comboCount} 连击!` : '连击!';
+                    ctx.fillText(comboText, x, y - (1 - alpha) * 30);
                     break;
             }
 
