@@ -1,5 +1,5 @@
 /**
- * 🧩 俄罗斯方块游戏 - 特殊能力+技能版
+ * 🧩 俄罗斯方块游戏 - 特殊能力+技能+道具版
  */
 
 (function() {
@@ -89,7 +89,7 @@
         SPLIT: { name: '分裂', color: '#00ff7f', probability: 0.06, icon: '🔀' }
     };
 
-    // 特殊能力颜色池（用于变色方块）
+    // 特殊能力颜色池
     const COLOR_POOL = [
         '#00f5ff', '#ffd700', '#da70d6', '#32cd32', '#ff6347',
         '#4169e1', '#ffa500', '#ff0000', '#00ff7f', '#ff69b4'
@@ -102,6 +102,17 @@
         PREVIEW: { name: '方块预览', cost: 20, duration: 10000, icon: '🔮' },
         ROTATE: { name: '场地旋转', cost: 50, icon: '🔄' }
     };
+
+    // 道具定义
+    const POWERUPS = {
+        EXTEND: { name: '加长', color: '#00ff00', icon: '📏', probability: 0.2 },
+        SPEED: { name: '加速', color: '#ff00ff', icon: '⚡', probability: 0.2, duration: 5000 },
+        CLEAR: { name: '清行', color: '#ff6600', icon: '🧹', probability: 0.2 },
+        COPY: { name: '复制', color: '#00ffff', icon: '📋', probability: 0.2 },
+        SHIELD: { name: '护盾', color: '#ffd700', icon: '🛡️', probability: 0.2 }
+    };
+
+    const POWERUP_NAMES = Object.keys(POWERUPS);
 
     // 等级对应的下落速度 (ms)
     const LEVEL_SPEED = [
@@ -137,7 +148,15 @@
             preview: { active: false, endTime: 0 },
             clear: { available: true },
             rotate: { available: true, rotating: false }
-        }
+        },
+        // 道具系统
+        powerups: [],           // 下落的道具 [{type, x, y}]
+        activeEffects: {        // 激活的道具效果
+            speedBoost: { active: false, endTime: 0 },
+            shield: false
+        },
+        powerupInterval: null,  // 道具生成计时器
+        baseSpeedMultiplier: 1  // 基础速度倍率
     };
 
     // ==================== Canvas 设置 ====================
@@ -189,8 +208,18 @@
             rotation: 0,
             shape: shape.rotations[0],
             x: Math.floor((COLS - shape.rotations[0][0].length) / 2),
-            y: 0
+            y: 0,
+            blocks: shape.rotations[0].flat().filter(x => x).length  // 方块数量
         };
+    }
+
+    function extendPiece() {
+        // 增加当前方块的方块数量
+        if (state.currentPiece && state.currentPiece.blocks < 4) {
+            state.currentPiece.blocks++;
+            state.score += 25;
+            addEffect(state.currentPiece.y, state.currentPiece.x, 'extend');
+        }
     }
 
     function rotatePiece() {
@@ -252,6 +281,177 @@
             return true;
         }
         return false;
+    }
+
+    // ==================== 道具系统 ====================
+    function spawnPowerup() {
+        if (!state.running || state.paused) return;
+
+        const type = POWERUP_NAMES[Math.floor(Math.random() * POWERUP_NAMES.length)];
+        const powerup = POWERUPS[type];
+
+        state.powerups.push({
+            type: type,
+            name: powerup.name,
+            color: powerup.color,
+            icon: powerup.icon,
+            x: Math.floor(Math.random() * (COLS - 2)) + 1,
+            y: 0
+        });
+    }
+
+    function updatePowerups() {
+        const toRemove = [];
+        const toAdd = [];
+
+        state.powerups.forEach((powerup, index) => {
+            powerup.y++;
+
+            // 检测是否到达底部或碰撞方块
+            let shouldRemove = false;
+            if (powerup.y >= ROWS) {
+                shouldRemove = true;
+            } else if (state.board[powerup.y][powerup.x]) {
+                shouldRemove = true;
+                // 触发道具效果
+                activatePowerup(powerup);
+            }
+
+            if (shouldRemove) {
+                toRemove.push(index);
+            }
+        });
+
+        // 移除已触发的道具
+        toRemove.reverse().forEach(index => {
+            state.powerups.splice(index, 1);
+        });
+    }
+
+    function activatePowerup(powerup) {
+        const type = powerup.type;
+        const powerupData = POWERUPS[type];
+
+        addEffect(powerup.y, powerup.x, 'powerup');
+
+        switch (type) {
+            case 'EXTEND':
+                // 加长道具: 当前方块长度+1
+                extendPiece();
+                showPowerupMessage('📏 方块变长!');
+                break;
+
+            case 'SPEED':
+                // 加速道具: 下落速度临时增加
+                state.baseSpeedMultiplier = 0.4;
+                state.activeEffects.speedBoost.active = true;
+                state.activeEffects.speedBoost.endTime = Date.now() + powerupData.duration;
+                showPowerupMessage('⚡ 加速中!');
+                resetDropInterval();
+
+                setTimeout(() => {
+                    state.baseSpeedMultiplier = 1;
+                    state.activeEffects.speedBoost.active = false;
+                    resetDropInterval();
+                }, powerupData.duration);
+                break;
+
+            case 'CLEAR':
+                // 清行道具: 随机消除一行
+                const rowsWithBlocks = [];
+                for (let row = 0; row < ROWS; row++) {
+                    let hasBlock = false;
+                    for (let col = 0; col < COLS; col++) {
+                        if (state.board[row][col]) {
+                            hasBlock = true;
+                            break;
+                        }
+                    }
+                    if (hasBlock) rowsWithBlocks.push(row);
+                }
+
+                if (rowsWithBlocks.length > 0) {
+                    const targetRow = rowsWithBlocks[Math.floor(Math.random() * rowsWithBlocks.length)];
+                    for (let col = 0; col < COLS; col++) {
+                        addEffect(targetRow, col, 'explosion');
+                        state.board[targetRow][col] = null;
+                    }
+                    applyGravity();
+                    state.score += 30;
+                    state.lines++;
+                    showPowerupMessage('🧹 清除一行!');
+                }
+                break;
+
+            case 'COPY':
+                // 复制道具: 复制当前方块（额外加一个方块）
+                if (state.currentPiece) {
+                    state.currentPiece.blocks++;
+                    state.score += 50;
+                    showPowerupMessage('📋 方块复制!');
+                }
+                break;
+
+            case 'SHIELD':
+                // 护盾道具: 防止一次游戏结束
+                state.activeEffects.shield = true;
+                showPowerupMessage('🛡️ 护盾激活!');
+                break;
+        }
+
+        updatePowerupUI();
+    }
+
+    function showPowerupMessage(text) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: #4ecca3;
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 1000;
+            animation: messagePopup 1s ease-out forwards;
+        `;
+        overlay.textContent = text;
+        document.body.appendChild(overlay);
+
+        setTimeout(() => overlay.remove(), 1000);
+    }
+
+    function startPowerupSpawner() {
+        // 每8-15秒生成一个道具
+        const randomTime = 8000 + Math.random() * 7000;
+        state.powerupInterval = setTimeout(() => {
+            spawnPowerup();
+            startPowerupSpawner();
+        }, randomTime);
+    }
+
+    function stopPowerupSpawner() {
+        if (state.powerupInterval) {
+            clearTimeout(state.powerupInterval);
+            state.powerupInterval = null;
+        }
+    }
+
+    function updatePowerupUI() {
+        const effects = state.activeEffects;
+        const icons = [];
+
+        if (effects.speedBoost.active) {
+            icons.push('⚡ 加速');
+        }
+        if (effects.shield) {
+            icons.push('🛡️ 护盾');
+        }
+
+        // 可以添加一个UI元素来显示当前激活的道具效果
     }
 
     // ==================== 特殊能力效果 ====================
@@ -364,11 +564,9 @@
         const skills = state.skills;
         const energy = state.energy;
 
-        // 更新能量条
         document.getElementById('energy-bar').style.width = (energy / state.energyMax * 100) + '%';
         document.getElementById('energy-text').textContent = Math.floor(energy) + ' / ' + state.energyMax;
 
-        // 更新技能按钮状态
         Object.keys(SKILLS).forEach((key, index) => {
             const btn = document.getElementById('skill-' + key.toLowerCase());
             const skill = skills[key.toLowerCase()];
@@ -400,7 +598,6 @@
         updateSkillsUI();
     }
 
-    // 技能1: 时间减缓
     function useSkillSlow() {
         if (state.energy < SKILLS.SLOW.cost) return false;
         if (state.skills.slow.active) return false;
@@ -412,7 +609,6 @@
         updateSkillsUI();
         resetDropInterval();
 
-        // 5秒后恢复正常速度
         setTimeout(() => {
             state.skills.slow.active = false;
             updateSkillsUI();
@@ -422,14 +618,12 @@
         return true;
     }
 
-    // 技能2: 行消除
     function useSkillClear() {
         if (state.energy < SKILLS.CLEAR.cost) return false;
         if (!state.skills.clear.available) return false;
 
         state.energy -= SKILLS.CLEAR.cost;
 
-        // 找到最底部有方块的行
         let targetRow = -1;
         for (let row = ROWS - 1; row >= 0; row--) {
             let hasBlock = false;
@@ -446,12 +640,10 @@
         }
 
         if (targetRow >= 0) {
-            // 清除该行
             for (let col = 0; col < COLS; col++) {
                 addEffect(targetRow, col, 'explosion');
                 state.board[targetRow][col] = null;
             }
-            // 上方方块下落
             applyGravity();
             state.score += 50;
             state.lines++;
@@ -463,7 +655,6 @@
         return true;
     }
 
-    // 技能3: 方块预览
     function useSkillPreview() {
         if (state.energy < SKILLS.PREVIEW.cost) return false;
         if (state.skills.preview.active) return false;
@@ -472,7 +663,6 @@
         state.skills.preview.active = true;
         state.skills.preview.endTime = Date.now() + SKILLS.PREVIEW.duration;
 
-        // 显示未来方块
         document.getElementById('future-box').style.display = 'block';
         renderFuturePieces();
 
@@ -487,7 +677,6 @@
         return true;
     }
 
-    // 技能4: 场地旋转
     function useSkillRotate() {
         if (state.energy < SKILLS.ROTATE.cost) return false;
         if (!state.skills.rotate.available || state.skills.rotate.rotating) return false;
@@ -496,11 +685,9 @@
         state.skills.rotate.rotating = true;
         updateSkillsUI();
 
-        // 旋转游戏区域
         const wrapper = document.querySelector('.game-board-wrapper');
         wrapper.classList.add('rotated');
 
-        // 旋转方块数组
         const newBoard = [];
         for (let col = 0; col < ROWS; col++) {
             newBoard[col] = [];
@@ -509,10 +696,6 @@
             }
         }
         state.board = newBoard;
-
-        // 交换行列数
-        const temp = COLS;
-        // COLS 和 ROWS 保持不变，但游戏板数据结构已改变
 
         setTimeout(() => {
             wrapper.classList.remove('rotated');
@@ -525,23 +708,14 @@
         return true;
     }
 
-    // 全局技能使用函数
     window.useSkill = function(skillName) {
         if (!state.running || state.paused || state.gameOver) return;
 
         switch (skillName) {
-            case 'slow':
-                useSkillSlow();
-                break;
-            case 'clear':
-                useSkillClear();
-                break;
-            case 'preview':
-                useSkillPreview();
-                break;
-            case 'rotate':
-                useSkillRotate();
-                break;
+            case 'slow': useSkillSlow(); break;
+            case 'clear': useSkillClear(); break;
+            case 'preview': useSkillPreview(); break;
+            case 'rotate': useSkillRotate(); break;
         }
         render();
     };
@@ -558,6 +732,27 @@
                     const boardX = piece.x + col;
 
                     if (boardY < 0) {
+                        // 检查护盾
+                        if (state.activeEffects.shield) {
+                            state.activeEffects.shield = false;
+                            // 将方块移到顶部
+                            piece.y = -shape.length + 1;
+                            // 重新放置
+                            for (let r = 0; r < shape.length; r++) {
+                                for (let c = 0; c < shape[r].length; c++) {
+                                    if (shape[r][c]) {
+                                        state.board[piece.y + r][piece.x + c] = {
+                                            color: piece.baseColor || piece.color,
+                                            special: piece.special
+                                        };
+                                    }
+                                }
+                            }
+                            showPowerupMessage('🛡️ 护盾生效!');
+                            updatePowerupUI();
+                            spawnNextPiece();
+                            return;
+                        }
                         gameOver();
                         return;
                     }
@@ -569,15 +764,11 @@
             }
         }
 
-        // 触发放置时的特殊效果
         if (piece.special === 'COLORFUL' || piece.special === 'MAGNETIC' || piece.special === 'SPLIT') {
             processSpecialEffects();
         }
 
-        // 检查消除行
         clearLines();
-
-        // 生成新方块
         spawnNextPiece();
     }
 
@@ -598,7 +789,7 @@
             if (isFull) {
                 linesToRemove.push(row);
                 linesCleared++;
-                energyGained += 5; // 每消除一行获得5点能量
+                energyGained += 5;
 
                 for (let col = 0; col < COLS; col++) {
                     if (state.board[row][col]) {
@@ -638,7 +829,6 @@
             updateUI();
         }
 
-        // 获得能量
         if (energyGained > 0) {
             addEnergy(energyGained);
         }
@@ -683,13 +873,22 @@
         state.currentPiece = state.nextPiece || createRandomPiece();
         state.nextPiece = createRandomPiece();
 
-        // 维护未来方块队列
         state.futurePieces.push(createRandomPiece());
         if (state.futurePieces.length > 3) {
             state.futurePieces.shift();
         }
 
         if (!isValidPosition(state.currentPiece)) {
+            // 检查护盾
+            if (state.activeEffects.shield) {
+                state.activeEffects.shield = false;
+                state.board = [];
+                initBoard();
+                showPowerupMessage('🛡️ 护盾生效!');
+                updatePowerupUI();
+                spawnNextPiece();
+                return;
+            }
             gameOver();
             return;
         }
@@ -731,6 +930,12 @@
         state.futurePieces = [];
         state.effects = [];
         state.energy = 0;
+        state.powerups = [];
+        state.baseSpeedMultiplier = 1;
+        state.activeEffects = {
+            speedBoost: { active: false, endTime: 0 },
+            shield: false
+        };
         state.skills = {
             slow: { active: false, endTime: 0 },
             preview: { active: false, endTime: 0 },
@@ -743,15 +948,18 @@
 
         updateUI();
         updateSkillsUI();
+        updatePowerupUI();
         spawnNextPiece();
 
         state.running = true;
         state.lastDropTime = performance.now();
         resetDropInterval();
+        startPowerupSpawner();
     }
 
     function stopGame() {
         state.running = false;
+        stopPowerupSpawner();
         if (state.dropInterval) {
             clearTimeout(state.dropInterval);
             state.dropInterval = null;
@@ -766,9 +974,12 @@
         if (state.running && !state.paused) {
             let speed = LEVEL_SPEED[Math.min(state.level - 1, LEVEL_SPEED.length - 1)];
 
-            // 时间减缓技能效果
             if (state.skills.slow.active) {
-                speed = speed * 2; // 速度减半
+                speed = speed * 2;
+            }
+
+            if (state.baseSpeedMultiplier < 1) {
+                speed = speed * state.baseSpeedMultiplier;
             }
 
             state.dropInterval = setTimeout(() => dropPiece(), speed);
@@ -777,6 +988,9 @@
 
     function dropPiece() {
         if (!state.running || state.paused || state.gameOver) return;
+
+        // 更新道具位置
+        updatePowerups();
 
         if (state.currentPiece.special === 'PENETRATE') {
             const distance = getDropDistance(state.currentPiece);
@@ -838,6 +1052,7 @@
             state.running = true;
             state.lastDropTime = performance.now();
             resetDropInterval();
+            startPowerupSpawner();
         }
 
         render();
@@ -872,6 +1087,11 @@
             }
         }
 
+        // 绘制道具
+        state.powerups.forEach(powerup => {
+            drawPowerup(powerup);
+        });
+
         // 绘制当前方块
         if (state.currentPiece && !state.gameOver) {
             const piece = state.currentPiece;
@@ -900,11 +1120,27 @@
         if (state.skills.slow.active) {
             ctx.fillStyle = 'rgba(102, 126, 234, 0.1)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-
             ctx.fillStyle = 'rgba(102, 126, 234, 0.5)';
             ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'left';
             ctx.fillText('⏱️ 时间减缓中', 10, 20);
+        }
+
+        // 加速效果
+        if (state.activeEffects.speedBoost.active) {
+            ctx.fillStyle = 'rgba(255, 0, 255, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(255, 0, 255, 0.5)';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText('⚡ 加速中!', canvas.width - 10, 20);
+        }
+
+        // 护盾效果
+        if (state.activeEffects.shield) {
+            ctx.strokeStyle = 'rgba(255, 215, 0, 0.5)';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
         }
 
         renderEffects();
@@ -941,6 +1177,30 @@
             context.textBaseline = 'middle';
             context.fillText(specialInfo.icon || '', xPos + size / 2, yPos + size / 2);
         }
+    }
+
+    function drawPowerup(powerup) {
+        const x = powerup.x * BLOCK_SIZE;
+        const y = powerup.y * BLOCK_SIZE;
+        const size = BLOCK_SIZE;
+
+        // 发光效果
+        ctx.shadowColor = powerup.color;
+        ctx.shadowBlur = 15;
+
+        ctx.fillStyle = powerup.color;
+        ctx.beginPath();
+        ctx.arc(x + size / 2, y + size / 2, size / 2 - 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+
+        // 道具图标
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(powerup.icon, x + size / 2, y + size / 2);
     }
 
     function drawGhostPiece(piece, ghostY) {
@@ -1014,6 +1274,19 @@
                         ctx.arc(x + (Math.random() - 0.5) * 10, y + (Math.random() - 0.5) * 10, 3, 0, Math.PI * 2);
                         ctx.fill();
                     }
+                    break;
+                case 'powerup':
+                    ctx.fillStyle = '#ffd700';
+                    ctx.beginPath();
+                    ctx.arc(x, y, BLOCK_SIZE * (1 - alpha), 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'extend':
+                    ctx.strokeStyle = '#00ff00';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(x, y, BLOCK_SIZE * (1 - alpha + 0.3), 0, Math.PI * 2);
+                    ctx.stroke();
                     break;
             }
 
@@ -1136,7 +1409,6 @@
         }
     }
 
-    // ==================== UI 更新 ====================
     function updateUI() {
         document.getElementById('score').textContent = state.score;
         document.getElementById('high-score').textContent = state.highScore;
@@ -1154,7 +1426,6 @@
                 return;
             }
 
-            // 技能快捷键
             if (e.key >= '1' && e.key <= '4' && state.running && !state.paused && !state.gameOver) {
                 const skillKeys = ['slow', 'clear', 'preview', 'rotate'];
                 const skillIndex = parseInt(e.key) - 1;
@@ -1172,32 +1443,16 @@
             if (!state.running || state.paused || state.gameOver) return;
 
             switch (e.key) {
-                case 'ArrowLeft':
-                case 'a':
-                case 'A':
-                    movePiece(-1, 0);
-                    break;
-                case 'ArrowRight':
-                case 'd':
-                case 'D':
-                    movePiece(1, 0);
-                    break;
-                case 'ArrowDown':
-                case 's':
-                case 'S':
+                case 'ArrowLeft': case 'a': case 'A': movePiece(-1, 0); break;
+                case 'ArrowRight': case 'd': case 'D': movePiece(1, 0); break;
+                case 'ArrowDown': case 's': case 'S':
                     if (movePiece(0, 1)) {
                         state.score += 1;
                         updateUI();
                     }
                     break;
-                case 'ArrowUp':
-                case 'w':
-                case 'W':
-                    rotatePiece();
-                    break;
-                case ' ':
-                    hardDrop();
-                    break;
+                case 'ArrowUp': case 'w': case 'W': rotatePiece(); break;
+                case ' ': hardDrop(); break;
             }
 
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
@@ -1208,20 +1463,14 @@
         });
     }
 
-    // 移动端控制
     window.changeDirection = function(dir) {
         if (!state.running || state.paused || state.gameOver) {
             if (!state.running && !state.gameOver) startGame();
             return;
         }
-
         switch (dir) {
-            case 'left':
-                movePiece(-1, 0);
-                break;
-            case 'right':
-                movePiece(1, 0);
-                break;
+            case 'left': movePiece(-1, 0); break;
+            case 'right': movePiece(1, 0); break;
             case 'down':
                 if (movePiece(0, 1)) {
                     state.score += 1;
@@ -1257,7 +1506,6 @@
         render();
     };
 
-    // ==================== 初始化 ====================
     function init() {
         loadHighScore();
         initBoard();
