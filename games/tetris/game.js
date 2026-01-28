@@ -114,6 +114,37 @@
 
     const POWERUP_NAMES = Object.keys(POWERUPS);
 
+    // ==================== 物理系统常量 ====================
+    const PHYSICS = {
+        INERTIA: {
+            MOVE_FRICTION: 0.88,      // 移动摩擦系数 (1 = 无摩擦)
+            SLIDE_DURATION: 120,      // 滑行持续时间 (ms)
+            BOUNCE_DAMPING: 0.3,      // 反弹衰减系数
+            BOUNCE_DURATION: 80       // 反弹持续时间 (ms)
+        },
+        GRAVITY: {
+            TOP_ZONE: 0.6,            // 上方区域重力倍率 (下落慢)
+            BOTTOM_ZONE: 1.2,         // 下方区域重力倍率 (下落快)
+            NORMAL_ZONE: 0.9          // 中间区域重力倍率
+        },
+        FRICTION: {
+            'I': 0.92,                // 青色方块摩擦力
+            'O': 0.96,                // 黄色方块摩擦力
+            'T': 0.88,                // 紫色方块摩擦力
+            'S': 0.90,                // 绿色方块摩擦力
+            'Z': 0.90,                // 红色方块摩擦力
+            'J': 0.88,                // 蓝色方块摩擦力
+            'L': 0.88                 // 橙色方块摩擦力
+        }
+    };
+
+    // 游戏重力区域划分
+    const GRAVITY_ZONES = {
+        TOP: { rows: 0, endRow: 5, multiplier: 0.6 },
+        MIDDLE: { rows: 6, endRow: 14, multiplier: 0.9 },
+        BOTTOM: { rows: 15, endRow: 20, multiplier: 1.2 }
+    };
+
     // 等级对应的下落速度 (ms)
     const LEVEL_SPEED = [
         800, 720, 650, 580, 500,
@@ -156,7 +187,18 @@
             shield: false
         },
         powerupInterval: null,  // 道具生成计时器
-        baseSpeedMultiplier: 1  // 基础速度倍率
+        baseSpeedMultiplier: 1, // 基础速度倍率
+        // 物理系统
+        physics: {
+            active: true,        // 是否启用物理效果
+            keys: {              // 按键状态
+                left: false,
+                right: false,
+                down: false
+            },
+            lastMoveTime: 0,     // 上次移动时间
+            moveDelay: 80        // 移动间隔 (用于惯性)
+        }
     };
 
     // ==================== Canvas 设置 ====================
@@ -209,7 +251,15 @@
             shape: shape.rotations[0],
             x: Math.floor((COLS - shape.rotations[0][0].length) / 2),
             y: 0,
-            blocks: shape.rotations[0].flat().filter(x => x).length  // 方块数量
+            blocks: shape.rotations[0].flat().filter(x => x).length,  // 方块数量
+            // 物理属性
+            vx: 0,                    // 水平速度
+            vy: 0,                    // 垂直速度
+            friction: PHYSICS.FRICTION[type] || 0.88,  // 摩擦系数
+            bouncing: false,          // 是否正在反弹
+            bounceDir: 0,             // 反弹方向
+            slideEndTime: 0,          // 滑行结束时间
+            gravityMultiplier: 1.0    // 当前区域重力倍率
         };
     }
 
@@ -281,6 +331,117 @@
             return true;
         }
         return false;
+    }
+
+    // ==================== 物理系统 ====================
+    function getGravityMultiplier(y) {
+        // 根据行数确定区域
+        if (y < 6) {
+            return PHYSICS.GRAVITY.TOP_ZONE;
+        } else if (y < 15) {
+            return PHYSICS.GRAVITY.NORMAL_ZONE;
+        } else {
+            return PHYSICS.GRAVITY.BOTTOM_ZONE;
+        }
+    }
+
+    function applyMovementForce(direction) {
+        const piece = state.currentPiece;
+        if (!piece || state.paused || state.gameOver) return;
+
+        // 施加初始速度
+        piece.vx = direction * 1.5;
+        piece.slideEndTime = performance.now() + PHYSICS.INERTIA.SLIDE_DURATION;
+    }
+
+    function startInertiaSlide() {
+        const piece = state.currentPiece;
+        if (!piece) return;
+
+        // 延长滑行时间
+        piece.slideEndTime = performance.now() + PHYSICS.INERTIA.SLIDE_DURATION;
+    }
+
+    function updateInertia() {
+        const piece = state.currentPiece;
+        if (!piece || state.paused || state.gameOver) return;
+
+        const now = performance.now();
+
+        // 检查按键状态，持续移动
+        if (state.physics.keys.left) {
+            piece.vx = -1.5;
+            piece.slideEndTime = now + PHYSICS.INERTIA.SLIDE_DURATION;
+        } else if (state.physics.keys.right) {
+            piece.vx = 1.5;
+            piece.slideEndTime = now + PHYSICS.INERTIA.SLIDE_DURATION;
+        } else if (now > piece.slideEndTime) {
+            // 滑行结束，应用摩擦力减速
+            piece.vx *= PHYSICS.INERTIA.MOVE_FRICTION;
+            if (Math.abs(piece.vx) < 0.1) {
+                piece.vx = 0;
+            }
+        }
+
+        // 根据速度移动方块
+        if (Math.abs(piece.vx) > 0.1) {
+            const dx = Math.round(piece.vx);
+            if (isValidPosition(piece, dx, 0)) {
+                piece.x += dx;
+            } else {
+                // 碰撞检测触发弹性反弹
+                handleElasticCollision(dx);
+            }
+        }
+
+        // 更新重力倍率
+        piece.gravityMultiplier = getGravityMultiplier(piece.y);
+    }
+
+    function handleElasticCollision(dx) {
+        const piece = state.currentPiece;
+        if (!piece) return;
+
+        // 轻微反弹效果
+        piece.bouncing = true;
+        piece.bounceDir = dx > 0 ? -1 : 1;
+
+        // 回弹一小步
+        const bounceDist = Math.min(Math.abs(dx), 2);
+        piece.x += piece.bounceDir * bounceDist;
+
+        // 应用摩擦力减少反弹
+        piece.vx *= piece.friction * PHYSICS.INERTIA.BOUNCE_DAMPING;
+
+        // 反弹衰减
+        setTimeout(() => {
+            if (piece) {
+                piece.bouncing = false;
+                piece.bounceDir = 0;
+            }
+        }, PHYSICS.INERTIA.BOUNCE_DURATION);
+    }
+
+    function getDropSpeed() {
+        if (!state.currentPiece) return LEVEL_SPEED[0];
+
+        let baseSpeed = LEVEL_SPEED[Math.min(state.level - 1, LEVEL_SPEED.length - 1)];
+
+        // 应用重力倍率 (重力越大，下落越快)
+        const gravityMult = state.currentPiece.gravityMultiplier || 1;
+        baseSpeed = baseSpeed / gravityMult;
+
+        // 技能效果
+        if (state.skills.slow.active) {
+            baseSpeed *= 2;
+        }
+
+        // 道具效果
+        if (state.baseSpeedMultiplier < 1) {
+            baseSpeed *= state.baseSpeedMultiplier;
+        }
+
+        return Math.max(baseSpeed, 30);
     }
 
     // ==================== 道具系统 ====================
@@ -873,6 +1034,17 @@
         state.currentPiece = state.nextPiece || createRandomPiece();
         state.nextPiece = createRandomPiece();
 
+        // 初始化新方块的物理属性
+        if (state.currentPiece) {
+            state.currentPiece.vx = 0;
+            state.currentPiece.vy = 0;
+            state.currentPiece.friction = PHYSICS.FRICTION[state.currentPiece.type] || 0.88;
+            state.currentPiece.bouncing = false;
+            state.currentPiece.bounceDir = 0;
+            state.currentPiece.slideEndTime = 0;
+            state.currentPiece.gravityMultiplier = getGravityMultiplier(state.currentPiece.y);
+        }
+
         state.futurePieces.push(createRandomPiece());
         if (state.futurePieces.length > 3) {
             state.futurePieces.shift();
@@ -972,22 +1144,17 @@
         }
 
         if (state.running && !state.paused) {
-            let speed = LEVEL_SPEED[Math.min(state.level - 1, LEVEL_SPEED.length - 1)];
-
-            if (state.skills.slow.active) {
-                speed = speed * 2;
-            }
-
-            if (state.baseSpeedMultiplier < 1) {
-                speed = speed * state.baseSpeedMultiplier;
-            }
-
+            // 使用物理重力系统计算速度
+            const speed = getDropSpeed();
             state.dropInterval = setTimeout(() => dropPiece(), speed);
         }
     }
 
     function dropPiece() {
         if (!state.running || state.paused || state.gameOver) return;
+
+        // 更新物理效果 (惯性滑行和重力)
+        updateInertia();
 
         // 更新道具位置
         updatePowerups();
@@ -1063,6 +1230,9 @@
         ctx.fillStyle = '#0a0a1a';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        // 绘制重力区域指示
+        drawGravityZones();
+
         ctx.strokeStyle = '#1a1a2e';
         ctx.lineWidth = 1;
         for (let row = 0; row <= ROWS; row++) {
@@ -1097,6 +1267,11 @@
             const piece = state.currentPiece;
             const shape = piece.shape;
 
+            // 绘制运动轨迹残影 (惯性滑行效果)
+            if (piece.sliding && Math.abs(piece.vx) > 0.5) {
+                drawMotionTrail(piece);
+            }
+
             if (piece.special !== 'PENETRATE') {
                 let shadowY = piece.y;
                 while (isValidPosition(piece, 0, shadowY - piece.y + 1)) {
@@ -1113,6 +1288,11 @@
                         drawBlock(ctx, piece.x + col, piece.y + row, piece.color, piece.special);
                     }
                 }
+            }
+
+            // 绘制反弹效果
+            if (piece.bouncing) {
+                drawBounceEffect(piece);
             }
         }
 
@@ -1221,6 +1401,76 @@
             }
         }
         ctx.globalAlpha = 1;
+    }
+
+    // ==================== 物理效果绘制 ====================
+    function drawGravityZones() {
+        // 上方区域 - 浅蓝色 (下落慢)
+        ctx.fillStyle = 'rgba(100, 200, 255, 0.08)';
+        ctx.fillRect(0, 0, canvas.width, 6 * BLOCK_SIZE);
+
+        // 中间区域 - 浅绿色 (正常)
+        ctx.fillStyle = 'rgba(100, 255, 100, 0.05)';
+        ctx.fillRect(0, 6 * BLOCK_SIZE, canvas.width, 9 * BLOCK_SIZE);
+
+        // 下方区域 - 橙色 (下落快)
+        ctx.fillStyle = 'rgba(255, 150, 0, 0.08)';
+        ctx.fillRect(0, 15 * BLOCK_SIZE, canvas.width, 5 * BLOCK_SIZE);
+    }
+
+    function drawMotionTrail(piece) {
+        // 绘制运动轨迹残影
+        ctx.globalAlpha = 0.25;
+        const shape = piece.shape;
+        const direction = Math.sign(piece.vx);
+
+        for (let i = 1; i <= 3; i++) {
+            const trailOffset = direction * i * 2;
+            for (let row = 0; row < shape.length; row++) {
+                for (let col = 0; col < shape[row].length; col++) {
+                    if (shape[row][col]) {
+                        const x = piece.x + col + trailOffset;
+                        const y = piece.y + row;
+                        if (x >= 0 && x < COLS) {
+                            ctx.fillStyle = piece.color;
+                            ctx.fillRect(
+                                x * BLOCK_SIZE + 2,
+                                y * BLOCK_SIZE + 2,
+                                BLOCK_SIZE - 4,
+                                BLOCK_SIZE - 4
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    function drawBounceEffect(piece) {
+        // 绘制反弹时的震动效果
+        const bounceOffset = piece.bounceDir * 2;
+        ctx.save();
+        ctx.translate(bounceOffset, 0);
+
+        // 绘制反弹边框
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 2;
+        const shape = piece.shape;
+
+        for (let row = 0; row < shape.length; row++) {
+            for (let col = 0; col < shape[row].length; col++) {
+                if (shape[row][col]) {
+                    ctx.strokeRect(
+                        (piece.x + col) * BLOCK_SIZE + 1,
+                        (piece.y + row) * BLOCK_SIZE + 1,
+                        BLOCK_SIZE - 2,
+                        BLOCK_SIZE - 2
+                    );
+                }
+            }
+        }
+        ctx.restore();
     }
 
     function renderEffects() {
@@ -1442,10 +1692,18 @@
 
             if (!state.running || state.paused || state.gameOver) return;
 
+            // 物理输入系统 - 按下时施加力
             switch (e.key) {
-                case 'ArrowLeft': case 'a': case 'A': movePiece(-1, 0); break;
-                case 'ArrowRight': case 'd': case 'D': movePiece(1, 0); break;
+                case 'ArrowLeft': case 'a': case 'A':
+                    state.physics.keys.left = true;
+                    applyMovementForce(-1);
+                    break;
+                case 'ArrowRight': case 'd': case 'D':
+                    state.physics.keys.right = true;
+                    applyMovementForce(1);
+                    break;
                 case 'ArrowDown': case 's': case 'S':
+                    state.physics.keys.down = true;
                     if (movePiece(0, 1)) {
                         state.score += 1;
                         updateUI();
@@ -1460,6 +1718,23 @@
             }
 
             render();
+        });
+
+        // 按键释放 - 结束持续移动，开始惯性滑行
+        document.addEventListener('keyup', (e) => {
+            switch (e.key) {
+                case 'ArrowLeft': case 'a': case 'A':
+                    state.physics.keys.left = false;
+                    startInertiaSlide();
+                    break;
+                case 'ArrowRight': case 'd': case 'D':
+                    state.physics.keys.right = false;
+                    startInertiaSlide();
+                    break;
+                case 'ArrowDown': case 's': case 'S':
+                    state.physics.keys.down = false;
+                    break;
+            }
         });
     }
 
